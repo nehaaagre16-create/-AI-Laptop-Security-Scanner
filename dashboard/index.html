@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Laptop Security Scanner</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="logo">
+        <div class="logo-icon"></div>
+        <span>SecurityScanner</span>
+      </div>
+      <nav class="nav">
+        <a href="#" class="nav-item active" data-page="dashboard">
+          <span class="nav-icon">&#9638;</span> Dashboard
+        </a>
+        <a href="#" class="nav-item" data-page="threats">
+          <span class="nav-icon">&#9888;</span> Threats
+          <span class="badge" id="threatBadge">0</span>
+        </a>
+        <a href="#" class="nav-item" data-page="files">
+          <span class="nav-icon">&#128193;</span> Files
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="status-dot" id="serverStatus"></div>
+        <span id="serverStatusText">Connected</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <h1 id="pageTitle">Security Dashboard</h1>
+        <div class="topbar-actions">
+          <div class="live-indicator" id="liveIndicator">
+            <span class="live-dot"></span>
+            <span class="live-text">LIVE</span>
+            <span class="last-update" id="lastUpdate"></span>
+          </div>
+          <div class="scan-timestamp" id="scanTimestamp" style="display:none"></div>
+
+        </div>
+      </header>
+
+      <div class="content" id="content">
+        <!-- Dashboard Page -->
+        <div class="page active" id="page-dashboard">
+          <div class="scan-panel" style="display:none">
+          <div class="scan-info">
+            <div id="scanStatus" class="status-text idle">Ready to scan</div>
+            <div class="progress-track">
+              <div id="progressBar" class="progress-bar" style="width: 0%"></div>
+            </div>
+          </div>
+          <div class="scan-actions">
+            <button id="clearBtn" class="btn btn-secondary">Clear Cache</button>
+            <div class="scan-meta" id="scanMeta"></div>
+          </div>
+          </div>
+
+          <!-- Live Scan Visualization -->
+          <div class="live-scan-panel" id="liveScanPanel">
+            <div class="live-scan-header">
+              <div class="scanning-path" id="scanningPath">Scanning: /home/paperclip</div>
+              <div class="scanning-status" id="scanningStatus">Initializing...</div>
+            </div>
+            <div class="live-scan-progress">
+              <div class="progress-bar-container">
+                <div class="progress-bar-fill" id="liveProgressBar" style="width: 0%"></div>
+              </div>
+              <div class="progress-percentage" id="liveProgressPercent">0%</div>
+            </div>
+            <div class="live-scan-details">
+              <div class="scan-detail-item">
+                <span class="detail-label">Current File:</span>
+                <span class="detail-value" id="currentFile">--</span>
+              </div>
+              <div class="scan-detail-item">
+                <span class="detail-label">Action:</span>
+                <span class="detail-value" id="currentAction">--</span>
+              </div>
+              <div class="scan-detail-item">
+                <span class="detail-label">Files Found:</span>
+                <span class="detail-value" id="filesFound">0</span>
+              </div>
+              <div class="scan-detail-item">
+                <span class="detail-label">Threats:</span>
+                <span class="detail-value" id="threatsFound">0</span>
+              </div>
+            </div>
+            <div class="scan-activity-log" id="scanActivityLog">
+              <div class="activity-item">Waiting for scan...</div>
+            </div>
+          </div>
+
+          <div class="kpi-grid">
+            <div class="kpi-card score">
+              <div class="kpi-header">
+                <span class="kpi-label">Security Score</span>
+                <span class="kpi-trend" id="scoreTrend"></span>
+              </div>
+              <div class="kpi-value" id="securityScore">--</div>
+              <div class="kpi-sub" id="scoreLabel">No scan yet</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-header">
+                <span class="kpi-label">Files Scanned</span>
+              </div>
+              <div class="kpi-value" id="totalFiles">--</div>
+              <div class="kpi-sub" id="totalSize">--</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-header">
+                <span class="kpi-label">Folders</span>
+              </div>
+              <div class="kpi-value" id="totalFolders">--</div>
+              <div class="kpi-sub">directories</div>
+            </div>
+            <div class="kpi-card danger">
+              <div class="kpi-header">
+                <span class="kpi-label">Critical</span>
+                <span class="kpi-badge" id="criticalBadge">0</span>
+              </div>
+              <div class="kpi-value" id="criticalCount">--</div>
+              <div class="kpi-sub">Malware-like files</div>
+            </div>
+            <div class="kpi-card danger">
+              <div class="kpi-header">
+                <span class="kpi-label">High</span>
+                <span class="kpi-badge" id="highBadge">0</span>
+              </div>
+              <div class="kpi-value" id="highCount">--</div>
+              <div class="kpi-sub">Suspicious executables</div>
+            </div>
+            <div class="kpi-card warning">
+              <div class="kpi-header">
+                <span class="kpi-label">Medium</span>
+                <span class="kpi-badge" id="mediumBadge">0</span>
+              </div>
+              <div class="kpi-value" id="mediumCount">--</div>
+              <div class="kpi-sub">Unknown scripts</div>
+            </div>
+            <div class="kpi-card warning">
+              <div class="kpi-header">
+                <span class="kpi-label">Low</span>
+                <span class="kpi-badge" id="lowBadge">0</span>
+              </div>
+              <div class="kpi-value" id="lowCount">--</div>
+              <div class="kpi-sub">Hidden files</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-header">
+                <span class="kpi-label">Safe</span>
+              </div>
+              <div class="kpi-value" id="safeCount">--</div>
+              <div class="kpi-sub">Clean files</div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="panel">
+              <div class="panel-header">
+                <h3>Risk Distribution</h3>
+              </div>
+              <div class="panel-body">
+                <div class="risk-chart" id="riskChart">
+                  <div class="risk-row">
+                    <span class="risk-label">Critical</span>
+                    <div class="risk-track"><div class="risk-fill critical" id="barCritical" style="width: 0%"></div></div>
+                    <span class="risk-count" id="countCritical">0</span>
+                  </div>
+                  <div class="risk-row">
+                    <span class="risk-label">High</span>
+                    <div class="risk-track"><div class="risk-fill high" id="barHigh" style="width: 0%"></div></div>
+                    <span class="risk-count" id="countHigh">0</span>
+                  </div>
+                  <div class="risk-row">
+                    <span class="risk-label">Medium</span>
+                    <div class="risk-track"><div class="risk-fill medium" id="barMedium" style="width: 0%"></div></div>
+                    <span class="risk-count" id="countMedium">0</span>
+                  </div>
+                  <div class="risk-row">
+                    <span class="risk-label">Low</span>
+                    <div class="risk-track"><div class="risk-fill low" id="barLow" style="width: 0%"></div></div>
+                    <span class="risk-count" id="countLow">0</span>
+                  </div>
+                  <div class="risk-row">
+                    <span class="risk-label">Safe</span>
+                    <div class="risk-track"><div class="risk-fill safe" id="barSafe" style="width: 0%"></div></div>
+                    <span class="risk-count" id="countSafe">0</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header">
+                <h3>Recommendations</h3>
+              </div>
+              <div class="panel-body">
+                <ul class="recommendation-list" id="recommendationList">
+                  <li class="rec-item">Run a scan to analyze your system security.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <h3>Recent Threats</h3>
+              <a href="#" class="link" data-page="threats">View all</a>
+            </div>
+            <div class="panel-body">
+              <div class="threat-table-wrap">
+                <table class="data-table" id="recentThreatsTable">
+                  <thead>
+                    <tr>
+                      <th>File</th>
+                      <th>Path</th>
+                      <th>Type</th>
+                      <th>Risk</th>
+                      <th>Size</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div class="empty-state" id="noThreatsMsg">
+                <p>No threats detected in recent scans.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Threats Page -->
+        <div class="page" id="page-threats">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>All Threats</h3>
+            </div>
+            <div class="panel-body">
+              <div class="table-wrap">
+                <table class="data-table" id="allThreatsTable">
+                  <thead>
+                    <tr>
+                      <th>File</th>
+                      <th>Path</th>
+                      <th>Type</th>
+                      <th>Risk</th>
+                      <th>Size</th>
+                      <th>Detected</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div class="empty-state" id="noAllThreatsMsg">
+                <p>No threats found in database.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Files Page -->
+        <div class="page" id="page-files">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>Scanned Files</h3>
+            </div>
+            <div class="panel-body">
+              <div class="file-filters">
+                <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn" data-filter="dangerous">Executable</button>
+                <button class="filter-btn" data-filter="hidden">Hidden</button>
+                <button class="filter-btn" data-filter="duplicate">Duplicates</button>
+                <button class="filter-btn" data-filter="large">Large (>100MB)</button>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table" id="filesTable">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Path</th>
+                      <th>Ext</th>
+                      <th>Size</th>
+                      <th>Hash</th>
+                      <th>Flags</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div class="empty-state" id="noFilesMsg">
+                <p>No files loaded. Run a scan first.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
