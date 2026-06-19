@@ -448,6 +448,7 @@ function displayReport(report) {
         <td>${escapeHtml(t.threat_type)}</td>
         <td><span class="risk-pill ${t.risk_level}">${t.risk_level}</span></td>
         <td>${t.file_size_formatted || formatBytes(t.file_size)}</td>
+        <td>${t.virus_total ? formatVirusTotal(t.virus_total) : '<span class="vt-unknown">Not scanned</span>'}</td>
       </tr>
     `).join('');
     document.getElementById('noThreatsMsg').style.display = 'none';
@@ -490,6 +491,7 @@ async function loadAllThreats() {
         <td><span class="risk-pill ${t.risk_level}">${t.risk_level}</span></td>
         <td>${formatBytes(t.file_size)}</td>
         <td>${new Date(t.detected_at).toLocaleString()}</td>
+        <td>${t.virus_total ? formatVirusTotal(t.virus_total) : '<span class="vt-unknown">Not scanned</span>'}</td>
       </tr>
     `).join('');
   } catch (err) {
@@ -563,12 +565,22 @@ function formatDuration(ms) {
   return (ms / 1000).toFixed(1) + 's';
 }
 
+function formatVirusTotal(vt) {
+  if (!vt) return '<span class="vt-unknown">Not scanned</span>';
+  if (vt.error) return '<span class="vt-error">Error</span>';
+  if (!vt.found) return '<span class="vt-unknown">Unknown</span>';
+  if (vt.malicious >= 5) return `<span class="vt-malicious">Malicious (${vt.malicious}/${vt.total})</span>`;
+  if (vt.malicious >= 3 || vt.suspicious >= 3) return `<span class="vt-suspicious">Suspicious (${vt.malicious}/${vt.total})</span>`;
+  if (vt.malicious > 0 || vt.suspicious > 0) return `<span class="vt-low">Low Risk (${vt.malicious}/${vt.total})</span>`;
+  return `<span class="vt-clean">Clean (${vt.harmless}/${vt.total})</span>`;
+}
+
 function formatBytes(bytes) {
   if (!bytes || bytes === 0) return '0 B';
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
 function parseSize(sizeStr) {

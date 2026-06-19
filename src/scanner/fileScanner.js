@@ -1,5 +1,7 @@
 const fs = require('fs');
 const path = require('path');
+const { calculateFileHash } = require('../hash/hashGenerator');
+const { checkHash } = require('../security/virusTotal');
 
 const DANGEROUS_EXTENSIONS = ['.exe', '.bat', '.cmd', '.vbs', '.ps1', '.scr', '.js', '.dll', '.sh', '.msi'];
 
@@ -73,7 +75,9 @@ async function scanDirectory(dirPath, options = {}) {
           created: stats.birthtime,
           isHidden: isHidden,
           isDangerous: isDangerous,
-          depth: currentDepth
+          depth: currentDepth,
+          hash: null,
+          virusTotal: null
         };
 
         if (!isHidden || includeHidden) {
@@ -83,6 +87,11 @@ async function scanDirectory(dirPath, options = {}) {
         if (onFileFound) {
           onFileFound(fileInfo);
         }
+
+        // Hash and VirusTotal check are done AFTER initial scan completes
+        // This keeps the main scan fast - we only check suspicious files
+        fileInfo.hash = null;
+        fileInfo.virusTotal = null;
       }
     }
   } catch (error) {

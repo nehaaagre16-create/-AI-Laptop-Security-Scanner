@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { scanDirectory, getScanTarget } = require('../scanner/fileScanner');
-const { hashFiles } = require('../hash/hashGenerator');
+const { calculateFileHash } = require('../hash/hashGenerator');
 const { analyzeThreat, getThreatsForDatabase } = require('../security/threatAnalyzer');
 const { calculateSecurityScore } = require('../security/riskEngine');
 const { generateReport } = require('../reports/reportGenerator');
@@ -164,11 +164,10 @@ async function runBackgroundScan(targetPath) {
 
     scanStatus.progress = 30;
 
-    const hashedFiles = await hashFiles(scanResult.files);
     scanStatus.progress = 60;
 
     const threats = [];
-    for (const file of hashedFiles) {
+    for (const file of scanResult.files) {
       const fileThreats = analyzeThreat(file);
       const dbThreat = getThreatsForDatabase(file, fileThreats);
       if (dbThreat) {
@@ -176,15 +175,15 @@ async function runBackgroundScan(targetPath) {
       }
     }
 
-    const securityScore = calculateSecurityScore(hashedFiles, threats);
+    const securityScore = calculateSecurityScore(scanResult.files, threats);
     const scanDuration = Date.now() - startTime;
 
     const scanId = await saveScan({
-      files_scanned: hashedFiles.length,
+      files_scanned: scanResult.files.length,
       folders_scanned: scanResult.folders,
-      hidden_files: hashedFiles.filter(f => f.isHidden).length,
-      dangerous_files: hashedFiles.filter(f => f.isDangerous).length,
-      duplicate_files: hashedFiles.filter(f => f.isDuplicate).length,
+      hidden_files: scanResult.files.filter(f => f.isHidden).length,
+      dangerous_files: scanResult.files.filter(f => f.isDangerous).length,
+      duplicate_files: scanResult.files.filter(f => f.isDuplicate).length,
       modified_files: 0,
       security_score: securityScore,
       scan_duration_ms: scanDuration
@@ -193,7 +192,7 @@ async function runBackgroundScan(targetPath) {
     await saveThreats(scanId, threats);
 
     const report = generateReport({
-      files: hashedFiles,
+      files: scanResult.files,
       threats: threats,
       scanDuration: scanDuration,
       scanPath: targetPath,
@@ -208,7 +207,7 @@ async function runBackgroundScan(targetPath) {
       report: report
     };
 
-    console.log(`[${new Date().toISOString()}] Background scan complete: ${hashedFiles.length} files, ${threats.length} threats, score ${securityScore}`);
+    console.log(`[${new Date().toISOString()}] Background scan complete: ${scanResult.files.length} files, ${threats.length} threats, score ${securityScore}`);
   } catch (error) {
     scanStatus = { status: 'error', error: error.message };
     console.error('Background scan error:', error);

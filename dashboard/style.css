@@ -640,6 +640,14 @@ body::before {
   color: var(--success);
 }
 
+/* VirusTotal badges */
+.vt-malicious { color: var(--danger); font-weight: 700; }
+.vt-suspicious { color: var(--warning); font-weight: 700; }
+.vt-low { color: #eab308; }
+.vt-clean { color: var(--success); }
+.vt-unknown { color: var(--text-dim); font-style: italic; }
+.vt-error { color: var(--danger); }
+
 /* Flags */
 .flag {
   display: inline-block;

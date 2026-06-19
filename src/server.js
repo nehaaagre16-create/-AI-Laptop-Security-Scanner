@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+require('dotenv').config();
 const { initDatabase } = require('./database/db');
 const scanRoutes = require('./routes/scan');
 const reportRoutes = require('./routes/reports');
@@ -92,6 +93,23 @@ app.post('/clear', async (req, res) => {
 app.use('/scan', scanRoutes);
 app.use('/reports', reportRoutes);
 app.use('/dashboard', dashboardRoutes);
+
+// VirusTotal on-demand check endpoint
+app.post('/virustotal/check', async (req, res) => {
+  try {
+    const { filePath } = req.body;
+    if (!filePath) {
+      return res.status(400).json({ error: 'filePath required' });
+    }
+    const { calculateFileHash } = require('./hash/hashGenerator');
+    const { checkHash } = require('./security/virusTotal');
+    const hash = await calculateFileHash(filePath);
+    const result = await checkHash(hash);
+    res.json({ hash, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../dashboard/index.html'));
