@@ -30,7 +30,8 @@ async function scanDirectory(dirPath, options = {}) {
     maxDepth = 15,
     currentDepth = 0,
     includeHidden = true,
-    onFileFound = null
+    onFileFound = null,
+    onProgress = null
   } = options;
 
   if (currentDepth > maxDepth) {
@@ -88,10 +89,12 @@ async function scanDirectory(dirPath, options = {}) {
           onFileFound(fileInfo);
         }
 
-        // Hash and VirusTotal check are done AFTER initial scan completes
-        // This keeps the main scan fast - we only check suspicious files
-        fileInfo.hash = null;
-        fileInfo.virusTotal = null;
+        if (onProgress && result.files.length % 100 === 0) {
+          onProgress({
+            filesFound: result.files.length,
+            currentFile: fullPath
+          });
+        }
       }
     }
   } catch (error) {

@@ -49,7 +49,54 @@ function createTables() {
         )
       `, (err2) => {
         if (err2) return reject(err2);
-        resolve();
+        
+        db.run(`
+          CREATE TABLE IF NOT EXISTS virustotal_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_path TEXT UNIQUE,
+            file_hash TEXT,
+            malicious INTEGER DEFAULT 0,
+            suspicious INTEGER DEFAULT 0,
+            harmless INTEGER DEFAULT 0,
+            total INTEGER DEFAULT 0,
+            verdict TEXT,
+            checked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            error TEXT
+          )
+        `, (err3) => {
+          if (err3) return reject(err3);
+          
+          db.run(`
+            CREATE TABLE IF NOT EXISTS file_hash_cache (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              file_path TEXT UNIQUE,
+              hash TEXT,
+              last_modified INTEGER,
+              risk_level TEXT,
+              last_checked DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+          `, (err4) => {
+            if (err4) return reject(err4);
+            
+            db.run(`
+              CREATE TABLE IF NOT EXISTS scan_config (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                folder_path TEXT NOT NULL DEFAULT '/home/paperclip',
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+              )
+            `, (err5) => {
+              if (err5) return reject(err5);
+              
+              // Insert default config if not exists
+              db.run(`
+                INSERT OR IGNORE INTO scan_config (id, folder_path) VALUES (1, '/home/paperclip')
+              `, (err6) => {
+                if (err6) return reject(err6);
+                resolve();
+              });
+            });
+          });
+        });
       });
     });
   });
@@ -155,6 +202,24 @@ function getAllThreats(limit = 100) {
       `SELECT t.*, s.scan_date 
        FROM threats t 
        JOIN scan_history s ON t.scan_id = s.id 
+       WHERE t.risk_level IN ('critical', 'high', 'medium', 'low')
+       ORDER BY t.detected_at DESC LIMIT ?`,
+      [limit],
+      (err, rows) => {
+        if (err) return reject(err);
+        resolve(rows);
+      }
+    );
+  });
+}
+
+function getInformationalFiles(limit = 100) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT t.*, s.scan_date 
+       FROM threats t 
+       JOIN scan_history s ON t.scan_id = s.id 
+       WHERE t.risk_level IN ('informational', 'suspicious', 'safe')
        ORDER BY t.detected_at DESC LIMIT ?`,
       [limit],
       (err, rows) => {
@@ -169,22 +234,130 @@ function getDashboardStats() {
   return new Promise((resolve, reject) => {
     db.get(`SELECT COUNT(*) as total_scans FROM scan_history`, (err, scans) => {
       if (err) return reject(err);
-      db.get(`SELECT COUNT(*) as total_threats FROM threats`, (err2, threats) => {
+      // Only count actual threats (not informational/safe)
+      db.get(`SELECT COUNT(*) as total_threats FROM threats WHERE risk_level IN ('critical', 'high', 'medium', 'low')`, (err2, threats) => {
         if (err2) return reject(err2);
-        db.get(`SELECT AVG(security_score) as avg_score FROM scan_history`, (err3, score) => {
-          if (err3) return reject(err3);
-          db.get(`SELECT SUM(files_scanned) as total_files FROM scan_history`, (err4, files) => {
-            if (err4) return reject(err4);
-            resolve({
-              total_scans: scans.total_scans,
-              total_threats: threats.total_threats,
-              avg_security_score: Math.round(score.avg_score || 100),
-              total_files_scanned: files.total_files || 0
+        db.get(`SELECT COUNT(*) as informational_count FROM threats WHERE risk_level IN ('informational', 'suspicious', 'safe')`, (err2b, info) => {
+          if (err2b) return reject(err2b);
+          db.get(`SELECT AVG(security_score) as avg_score FROM scan_history`, (err3, score) => {
+            if (err3) return reject(err3);
+            db.get(`SELECT SUM(files_scanned) as total_files FROM scan_history`, (err4, files) => {
+              if (err4) return reject(err4);
+              db.get(`SELECT files_scanned, security_score FROM scan_history ORDER BY scan_date DESC LIMIT 1`, (err5, latest) => {
+                if (err5) return reject(err5);
+                resolve({
+                  total_scans: scans.total_scans,
+                  total_threats: threats.total_threats,
+                  informational_count: info.informational_count,
+                  avg_security_score: Math.round(score.avg_score || 100),
+                  total_files_scanned: files.total_files || 0,
+                  latest_files_scanned: latest ? latest.files_scanned : 0,
+                  latest_security_score: latest ? latest.security_score : 100
+                });
+              });
             });
           });
         });
       });
     });
+  });
+}
+
+function saveVirusTotalResult(result) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT OR REPLACE INTO virustotal_results 
+       (file_path, file_hash, malicious, suspicious, harmless, total, verdict, checked_at, error)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [result.file_path, result.file_hash, result.malicious || 0, result.suspicious || 0,
+       result.harmless || 0, result.total || 0, result.verdict || 'unknown', result.checked_at,
+       result.error || null],
+      (err) => {
+        if (err) return reject(err);
+        resolve();
+      }
+    );
+  });
+}
+
+function getVirusTotalResult(filePath) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT * FROM virustotal_results WHERE file_path = ?`,
+      [filePath],
+      (err, row) => {
+        if (err) return reject(err);
+        resolve(row || null);
+      }
+    );
+  });
+}
+
+function getAllVirusTotalResults(limit = 100) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT * FROM virustotal_results ORDER BY checked_at DESC LIMIT ?`,
+      [limit],
+      (err, rows) => {
+        if (err) return reject(err);
+        resolve(rows);
+      }
+    );
+  });
+}
+
+// File hash cache functions
+function getCachedHash(filePath) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT * FROM file_hash_cache WHERE file_path = ?`,
+      [filePath],
+      (err, row) => {
+        if (err) return reject(err);
+        resolve(row || null);
+      }
+    );
+  });
+}
+
+function saveHashCache(filePath, hash, lastModified, riskLevel) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT OR REPLACE INTO file_hash_cache 
+       (file_path, hash, last_modified, risk_level, last_checked)
+       VALUES (?, ?, ?, ?, datetime('now'))`,
+      [filePath, hash, lastModified, riskLevel],
+      (err) => {
+        if (err) return reject(err);
+        resolve();
+      }
+    );
+  });
+}
+
+// Scan config functions
+function getScanConfig() {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT folder_path FROM scan_config WHERE id = 1`,
+      (err, row) => {
+        if (err) return reject(err);
+        resolve(row ? row.folder_path : '/home/paperclip');
+      }
+    );
+  });
+}
+
+function updateScanConfig(folderPath) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT OR REPLACE INTO scan_config (id, folder_path, updated_at) VALUES (1, ?, datetime('now'))`,
+      [folderPath],
+      (err) => {
+        if (err) return reject(err);
+        resolve();
+      }
+    );
   });
 }
 
@@ -200,6 +373,13 @@ module.exports = {
   getLatestScan,
   getThreatsByScanId,
   getAllThreats,
+  getInformationalFiles,
   getDashboardStats,
+  saveVirusTotalResult,
+  getAllVirusTotalResults,
+  getCachedHash,
+  saveHashCache,
+  getScanConfig,
+  updateScanConfig,
   getDatabase
 };

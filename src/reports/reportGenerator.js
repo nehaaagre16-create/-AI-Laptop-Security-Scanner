@@ -1,11 +1,13 @@
-const { calculateSecurityScore, getRiskDistribution, getRecommendations } = require('../security/riskEngine');
+const { calculateSecurityScore, getScoreLabel, getScoreColor, getRiskDistribution, getRecommendations } = require('../security/riskEngine');
 const { classifyRiskLevel } = require('../security/threatAnalyzer');
 
 function generateReport(scanData) {
-  const { files, threats, scanDuration, scanPath } = scanData;
+  const { files, threats, suspicious, informational, scanDuration, scanPath } = scanData;
   
   const securityScore = calculateSecurityScore(files, threats);
-  const riskDistribution = getRiskDistribution(threats);
+  const scoreLabel = getScoreLabel(securityScore);
+  const scoreColor = getScoreColor(securityScore);
+  const riskDistribution = getRiskDistribution(threats, files.length);
   const recommendations = getRecommendations(securityScore, threats, files);
   
   const dangerousFiles = files.filter(f => f.isDangerous);
@@ -14,6 +16,12 @@ function generateReport(scanData) {
   const largeFiles = files.filter(f => f.size > 100 * 1024 * 1024);
   
   const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+  
+  // Single source of truth calculations
+  const actualThreats = threats.length;
+  const suspiciousCount = suspicious ? suspicious.length : 0;
+  const informationalCount = informational ? informational.length : 0;
+  const safeFiles = Math.max(0, files.length - actualThreats - suspiciousCount - informationalCount);
   
   return {
     summary: {
@@ -25,7 +33,12 @@ function generateReport(scanData) {
       total_size_bytes: totalSize,
       total_size_formatted: formatBytes(totalSize),
       security_score: securityScore,
-      threats_found: threats.length
+      score_label: scoreLabel,
+      score_color: scoreColor,
+      threats_found: actualThreats,
+      suspicious_count: suspiciousCount,
+      informational_count: informationalCount,
+      safe_files: safeFiles
     },
     metrics: {
       files_scanned: files.length,
@@ -34,7 +47,11 @@ function generateReport(scanData) {
       dangerous_files: dangerousFiles.length,
       duplicate_files: duplicateFiles.length,
       large_files: largeFiles.length,
-      modified_files: 0
+      modified_files: 0,
+      safe_files: safeFiles,
+      threats_found: actualThreats,
+      suspicious_count: suspiciousCount,
+      informational_count: informationalCount
     },
     risk_distribution: riskDistribution,
     threats: threats.map(t => ({
@@ -46,18 +63,24 @@ function generateReport(scanData) {
       threat_type: t.threat_type,
       risk_level: t.risk_level
     })),
-    suspicious_files: files
-      .filter(f => f.isDangerous || f.isHidden || f.isDuplicate)
-      .map(f => ({
-        name: f.name,
-        path: f.path,
-        extension: f.extension,
-        size: formatBytes(f.size),
-        is_hidden: f.isHidden,
-        is_dangerous: f.isDangerous,
-        is_duplicate: f.isDuplicate,
-        hash: f.hash
-      })),
+    suspicious_files: suspicious ? suspicious.map(s => ({
+      file_name: s.file_name,
+      file_path: s.file_path,
+      file_hash: s.file_hash,
+      file_size: s.file_size,
+      file_size_formatted: formatBytes(s.file_size),
+      threat_type: s.threat_type,
+      risk_level: s.risk_level
+    })) : [],
+    informational_files: informational ? informational.map(i => ({
+      file_name: i.file_name,
+      file_path: i.file_path,
+      file_hash: i.file_hash,
+      file_size: i.file_size,
+      file_size_formatted: formatBytes(i.file_size),
+      threat_type: i.threat_type,
+      risk_level: i.risk_level
+    })) : [],
     recommendations: recommendations,
     status: 'completed'
   };

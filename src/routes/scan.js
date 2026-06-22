@@ -3,8 +3,12 @@ const router = express.Router();
 const { scanDirectory, getScanTarget } = require('../scanner/fileScanner');
 const { calculateFileHash } = require('../hash/hashGenerator');
 const { analyzeThreat, getThreatsForDatabase } = require('../security/threatAnalyzer');
-const { calculateSecurityScore } = require('../security/riskEngine');
+const { calculateSecurityScore, getScoreLabel, getScoreColor } = require('../security/riskEngine');
 const { generateReport } = require('../reports/reportGenerator');
+const { shouldCheckWithVirusTotal, checkFileWithVirusTotal, formatVirusTotalResult } = require('../security/virusTotalService');
+const { saveVirusTotalResult } = require('../database/db');
+const { ScanManager } = require('../scanner/scanManager');
+const { resolveAndValidate } = require('../utils/pathResolver');
 const {
   saveScan,
   saveThreats,
@@ -14,8 +18,8 @@ const {
   getAllThreats
 } = require('../database/db');
 
-let scanStatus = { status: 'idle', progress: 0 };
-let latestReport = null;
+const scanManager = new ScanManager();
+
 let backgroundScanInterval = null;
 let fileWatcher = null;
 
@@ -143,73 +147,12 @@ async function storeImmediateThreat(filePath, result) {
 }
 
 async function runBackgroundScan(targetPath) {
-  if (scanStatus.status === 'scanning') return;
-
-  scanStatus = { status: 'scanning', progress: 0, path: targetPath };
-  console.log(`[${new Date().toISOString()}] Background scan started: ${targetPath}`);
-
-  const startTime = Date.now();
-
   try {
-    const scanResult = await scanDirectory(targetPath, {
-      maxDepth: 15,
-      includeHidden: true,
-      excludeDirs: [
-        'dev', 'proc', 'sys', 'run', 'boot', 'snap', 'tmp',
-        'var', 'usr', 'sbin', 'bin', 'lib', 'lib64', 'etc',
-        'root', 'lost+found', 'node_modules', '.git', '.hermes',
-        '.cache', 'dist', 'build', '.vscode', '.idea'
-      ]
+    await scanManager.startScan(targetPath, {
+      scanMode: 'full',
+      maxDepth: 15
     });
-
-    scanStatus.progress = 30;
-
-    scanStatus.progress = 60;
-
-    const threats = [];
-    for (const file of scanResult.files) {
-      const fileThreats = analyzeThreat(file);
-      const dbThreat = getThreatsForDatabase(file, fileThreats);
-      if (dbThreat) {
-        threats.push(dbThreat);
-      }
-    }
-
-    const securityScore = calculateSecurityScore(scanResult.files, threats);
-    const scanDuration = Date.now() - startTime;
-
-    const scanId = await saveScan({
-      files_scanned: scanResult.files.length,
-      folders_scanned: scanResult.folders,
-      hidden_files: scanResult.files.filter(f => f.isHidden).length,
-      dangerous_files: scanResult.files.filter(f => f.isDangerous).length,
-      duplicate_files: scanResult.files.filter(f => f.isDuplicate).length,
-      modified_files: 0,
-      security_score: securityScore,
-      scan_duration_ms: scanDuration
-    });
-
-    await saveThreats(scanId, threats);
-
-    const report = generateReport({
-      files: scanResult.files,
-      threats: threats,
-      scanDuration: scanDuration,
-      scanPath: targetPath,
-      folders: scanResult.folders
-    });
-
-    latestReport = report;
-    scanStatus = {
-      status: 'completed',
-      progress: 100,
-      scanId: scanId,
-      report: report
-    };
-
-    console.log(`[${new Date().toISOString()}] Background scan complete: ${scanResult.files.length} files, ${threats.length} threats, score ${securityScore}`);
   } catch (error) {
-    scanStatus = { status: 'error', error: error.message };
     console.error('Background scan error:', error);
   }
 }
@@ -226,8 +169,11 @@ function startBackgroundScanning(targetPath, intervalMinutes = 30) {
   runBackgroundScan(targetPath);
 
   // Then every interval
-  backgroundScanInterval = setInterval(() => {
-    runBackgroundScan(targetPath);
+  backgroundScanInterval = setInterval(async () => {
+    // Get latest folder from config before each scan
+    const { getScanConfig } = require('../database/db');
+    const latestFolder = await getScanConfig();
+    runBackgroundScan(latestFolder);
   }, intervalMinutes * 60 * 1000);
   
   console.log(`[${new Date().toISOString()}] Background scanning started: every ${intervalMinutes} minutes + real-time file watcher for ENTIRE LAPTOP`);
@@ -235,32 +181,93 @@ function startBackgroundScanning(targetPath, intervalMinutes = 30) {
 
 router.post('/start', async (req, res) => {
   try {
-    if (scanStatus.status === 'scanning') {
+    const status = scanManager.getStatus();
+    if (status.status === 'scanning') {
       return res.status(409).json({ error: 'Scan already in progress' });
     }
 
-    const targetPath = req.body.path || getScanTarget();
-    res.json({ message: 'Scan started', path: targetPath });
+    // Get folder from request or config
+    let targetPath = req.body.path;
+    if (!targetPath) {
+      const { getScanConfig } = require('../database/db');
+      targetPath = await getScanConfig();
+    }
+    
+    // Use path resolver to detect and normalize path
+    const pathResult = resolveAndValidate(targetPath);
+    
+    if (!pathResult.isValid || !pathResult.validation.readable) {
+      return res.status(400).json({
+        error: pathResult.validation.message || 'Invalid path',
+        details: {
+          originalPath: pathResult.originalPath,
+          normalizedPath: pathResult.normalizedPath,
+          type: pathResult.type
+        }
+      });
+    }
+    
+    const normalizedPath = pathResult.normalizedPath;
+    const scanMode = req.body.mode || 'full';
+    
+    res.json({ 
+      message: 'Scan started', 
+      path: normalizedPath, 
+      originalPath: pathResult.originalPath,
+      type: pathResult.type,
+      mode: scanMode 
+    });
 
-    await runBackgroundScan(targetPath);
+    // Start scan in background
+    if (scanMode === 'quick') {
+      await scanManager.quickScan();
+    } else {
+      await scanManager.startScan(normalizedPath, { scanMode: 'full' });
+    }
   } catch (error) {
-    scanStatus = { status: 'error', error: error.message };
     console.error('Scan error:', error);
   }
 });
 
+router.post('/quick', async (req, res) => {
+  try {
+    const status = scanManager.getStatus();
+    if (status.status === 'scanning') {
+      return res.status(409).json({ error: 'Scan already in progress' });
+    }
+
+    res.json({ message: 'Quick scan started' });
+    await scanManager.quickScan();
+  } catch (error) {
+    console.error('Quick scan error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/status', (req, res) => {
-  res.json(scanStatus);
+  res.json(scanManager.getStatus());
 });
 
 router.get('/last-scan', (req, res) => {
+  const status = scanManager.getStatus();
   res.json({
-    lastScanAt: scanStatus.status === 'completed' ? new Date().toISOString() : null,
-    status: scanStatus.status,
-    nextScanIn: scanStatus.status === 'scanning' ? 'running now' : '30 minutes'
+    lastScanAt: status.status === 'completed' ? new Date().toISOString() : null,
+    status: status.status,
+    nextScanIn: status.status === 'scanning' ? 'running now' : '30 minutes'
   });
+});
+
+// New endpoint for informational files
+router.get('/informational', async (req, res) => {
+  try {
+    const { getInformationalFiles } = require('../database/db');
+    const files = await getInformationalFiles(100);
+    res.json(files);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 module.exports = router;
 module.exports.startBackgroundScanning = startBackgroundScanning;
-module.exports.latestReport = latestReport;
+module.exports.latestReport = () => scanManager.latestReport;

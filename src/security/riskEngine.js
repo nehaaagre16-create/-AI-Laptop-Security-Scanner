@@ -2,35 +2,44 @@ const { classifyRiskLevel } = require('./threatAnalyzer');
 
 function calculateSecurityScore(files, threats) {
   if (files.length === 0) return 100;
-  
-  const totalFiles = files.length;
-  const threatCount = threats.length;
-  
+
   let score = 100;
-  
-  // Deduct for threats
-  score -= (threatCount / totalFiles) * 40;
-  
-  // Deduct for hidden files
-  const hiddenCount = files.filter(f => f.isHidden).length;
-  score -= (hiddenCount / totalFiles) * 15;
-  
-  // Deduct for dangerous extensions
-  const dangerousCount = files.filter(f => f.isDangerous).length;
-  score -= (dangerousCount / totalFiles) * 25;
-  
-  // Deduct for duplicates
-  const duplicateCount = files.filter(f => f.isDuplicate).length;
-  score -= (duplicateCount / totalFiles) * 10;
-  
-  // Deduct for large files
-  const largeCount = files.filter(f => f.size > 100 * 1024 * 1024).length;
-  score -= (largeCount / totalFiles) * 5;
-  
-  return Math.max(0, Math.round(score));
+
+  // Count actual threats by severity (suspicious/informational = 0 penalty)
+  const criticalCount = threats.filter(t => t.risk_level === 'critical').length;
+  const highCount = threats.filter(t => t.risk_level === 'high').length;
+  const mediumCount = threats.filter(t => t.risk_level === 'medium').length;
+  const lowCount = threats.filter(t => t.risk_level === 'low').length;
+
+  // Apply severity-based penalties
+  score -= criticalCount * 30;  // -30 per critical
+  score -= highCount * 15;      // -15 per high
+  score -= mediumCount * 5;     // -5 per medium
+  score -= lowCount * 1;        // -1 per low
+  // suspicious = 0 penalty (tracked separately)
+  // informational = 0 penalty
+
+  // Cap between 0 and 100
+  score = Math.max(0, Math.min(100, score));
+
+  return Math.round(score);
 }
 
-function getRiskDistribution(threats) {
+function getScoreLabel(score) {
+  if (score >= 90) return 'Excellent';
+  if (score >= 70) return 'Good';
+  if (score >= 40) return 'Warning';
+  return 'Dangerous';
+}
+
+function getScoreColor(score) {
+  if (score >= 90) return '#22c55e';  // Green
+  if (score >= 70) return '#3b82f6';  // Blue
+  if (score >= 40) return '#f59e0b';  // Orange
+  return '#ef4444';                   // Red
+}
+
+function getRiskDistribution(threats, totalFiles) {
   const distribution = {
     critical: 0,
     high: 0,
@@ -46,42 +55,51 @@ function getRiskDistribution(threats) {
     }
   });
   
+  // Safe files = total files - files with threats
+  const threatenedFiles = new Set(threats.map(t => t.file_path)).size;
+  distribution.safe = totalFiles - threatenedFiles;
+  
   return distribution;
 }
 
 function getRecommendations(score, threats, files) {
   const recommendations = [];
   
-  if (score < 50) {
-    recommendations.push('Critical: Immediate action required. Review all high-risk files.');
+  const critical = threats.filter(t => t.risk_level === 'critical');
+  const high = threats.filter(t => t.risk_level === 'high');
+  const medium = threats.filter(t => t.risk_level === 'medium');
+  const low = threats.filter(t => t.risk_level === 'low');
+  
+  // Critical threats first
+  if (critical.length > 0) {
+    recommendations.push(`CRITICAL: ${critical.length} malware-like files found. Immediate action required.`);
+  }
+  
+  // High threats
+  if (high.length > 0) {
+    recommendations.push(`WARNING: ${high.length} suspicious executables detected. Review before running.`);
+  }
+  
+  // Medium threats
+  if (medium.length > 0) {
+    recommendations.push(`Review ${medium.length} unknown scripts. Verify they are from trusted sources.`);
+  }
+  
+  // Low threats
+  if (low.length > 0) {
+    recommendations.push(`${low.length} hidden files found. Review if they are necessary.`);
+  }
+  
+  // Score-based
+  if (score < 40) {
+    recommendations.push('Security score is critical. Run full scan and review all threats immediately.');
   } else if (score < 70) {
-    recommendations.push('High risk detected. Review suspicious files and remove unnecessary executables.');
-  } else if (score < 85) {
-    recommendations.push('Medium risk. Clean up hidden files and review file extensions.');
-  } else {
-    recommendations.push('System is relatively secure. Continue regular scans.');
-  }
-  // Dangerous extensions - only mention if they are actual threats
-  // We no longer count dangerous extensions as threats, only real malware
-  // This prevents false positives from normal .exe, .dll files
-  
-  // Hidden files - not a threat, just informational
-  // const hiddenFiles = files.filter(f => f.isHidden);
-  // if (hiddenFiles.length > 0) {
-  //   recommendations.push(`Found ${hiddenFiles.length} hidden file(s). Review if they are necessary.`);
-  // }
-  
-  // Large files - not a threat, just informational
-  // const largeFiles = files.filter(f => f.size > 100 * 1024 * 1024);
-  // if (largeFiles.length > 0) {
-  //   recommendations.push(`Found ${largeFiles.length} large file(s) over 100MB. Review if needed.`);
-  // }
-  
-  // Only show recommendations for actual threats or security issues
-  if (threats.length === 0) {
-    recommendations.push('No threats detected. Your system is secure.');
+    recommendations.push('Security score is low. Remove unnecessary executables and review scripts.');
+  } else if (score >= 90) {
+    recommendations.push('System is secure. Continue regular scans.');
   }
   
+  // Large files
   const largeFiles = files.filter(f => f.size > 100 * 1024 * 1024);
   if (largeFiles.length > 0) {
     recommendations.push(`Found ${largeFiles.length} large file(s) over 100MB. Review if needed.`);
@@ -92,6 +110,8 @@ function getRecommendations(score, threats, files) {
 
 module.exports = {
   calculateSecurityScore,
+  getScoreLabel,
+  getScoreColor,
   getRiskDistribution,
   getRecommendations
 };

@@ -7,6 +7,7 @@ const reportRoutes = require('./routes/reports');
 const dashboardRoutes = require('./routes/dashboard');
 const { getAllThreats, getDatabase } = require('./database/db');
 const { generateSolutionsReport } = require('./security/solutions');
+const { resolveAndValidate } = require('./utils/pathResolver');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -27,7 +28,20 @@ function emitThreatAlert(threatData) {
 }
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '../dashboard')));
+app.use(express.static(path.join(__dirname, '../dashboard'), {
+  etag: false,
+  lastModified: false,
+  setHeaders: (res, path) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+}));
+
+// Serve SPA - fallback to index.html for React Router
+app.get('/dashboard*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dashboard/index.html'));
+});
 app.use(express.static(path.join(__dirname, '../public')));
 
 app.get('/health', (req, res) => {
@@ -111,6 +125,53 @@ app.post('/virustotal/check', async (req, res) => {
   }
 });
 
+// Scan folder configuration endpoints
+app.get('/api/config/folder', async (req, res) => {
+  try {
+    const { getScanConfig } = require('./database/db');
+    const folderPath = await getScanConfig();
+    res.json({ folderPath });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/config/folder', async (req, res) => {
+  try {
+    const { folderPath } = req.body;
+    if (!folderPath) {
+      return res.status(400).json({ error: 'folderPath required' });
+    }
+    
+    // Use path resolver to detect and normalize path
+    const result = resolveAndValidate(folderPath);
+    
+    if (!result.isValid || !result.validation.readable) {
+      return res.status(400).json({ 
+        error: result.validation.message || 'Invalid path',
+        details: {
+          originalPath: result.originalPath,
+          normalizedPath: result.normalizedPath,
+          type: result.type
+        }
+      });
+    }
+    
+    const { updateScanConfig } = require('./database/db');
+    await updateScanConfig(result.normalizedPath);
+    res.json({
+      message: 'Folder updated',
+      folderPath: result.normalizedPath,
+      userPath: result.originalPath,
+      resolvedPath: result.normalizedPath,
+      type: result.type,
+      validation: result.validation
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../dashboard/index.html'));
 });
@@ -118,14 +179,20 @@ app.get('/', (req, res) => {
 async function startServer() {
   try {
     await initDatabase();
-    app.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT}`);
+    
+    // Get initial folder from config before starting server
+    const { getScanConfig } = require('./database/db');
+    const initialFolder = await getScanConfig();
+    
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on http://0.0.0.0:${PORT}`);
       console.log(`Dashboard: http://localhost:${PORT}`);
+      console.log(`WSL IP: http://172.30.77.104:${PORT}`);
       
-    // Start background scanning loop (every 30 minutes) - MONITOR ENTIRE LAPTOP
-    const { startBackgroundScanning } = require('./routes/scan');
-    startBackgroundScanning('/home', 30);
-    console.log('Background scanning started: every 30 minutes for ENTIRE LAPTOP');
+      // Start background scanning loop (every 30 minutes)
+      const { startBackgroundScanning } = require('./routes/scan');
+      startBackgroundScanning(initialFolder, 30);
+      console.log('Background scanning started:', initialFolder);
     });
   } catch (error) {
     console.error('Failed to start server:', error);
