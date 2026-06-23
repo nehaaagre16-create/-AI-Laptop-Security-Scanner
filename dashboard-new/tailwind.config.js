@@ -8,17 +8,17 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: '#0B1020',
-        surface: '#111827',
-        'surface-hover': '#1F2937',
+        background: 'var(--color-background)',
+        surface: 'var(--color-surface)',
+        'surface-hover': 'var(--color-surface-hover)',
         primary: '#8B5CF6',
         secondary: '#6366F1',
         success: '#22C55E',
         warning: '#F59E0B',
         danger: '#EF4444',
-        muted: '#94A3B8',
-        'text-primary': '#F9FAFB',
-        'text-muted': '#94A3B8',
+        muted: 'var(--color-muted)',
+        'text-primary': 'var(--color-text-primary)',
+        'text-muted': 'var(--color-text-muted)',
       },
       fontFamily: {
         sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],

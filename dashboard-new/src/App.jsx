@@ -10,9 +10,12 @@ import ChartsSection from './components/ChartsSection';
 import ThreatsTable from './components/ThreatsTable';
 import Recommendations from './components/Recommendations';
 import ToastAlert from './components/ToastAlert';
-import ScanConfig from './components/ScanConfig';
-import ScanScope from './components/ScanScope';
 import ScanConfigCard from './components/ScanConfigCard';
+import ScanScope from './components/ScanScope';
+import Reports from './components/Reports';
+import HistoryPage from './components/History';
+import SettingsPage from './components/Settings';
+import { ThemeProvider } from './components/ThemeContext';
 
 const API_BASE = '';
 
@@ -101,11 +104,9 @@ function App() {
       const threatsData = await threatsRes.json();
       setThreats(threatsData || []);
 
-      // Fetch informational files separately
-      const infoRes = await fetch(`${API_BASE}/scan/informational`);
-      if (infoRes.ok) {
-        const infoData = await infoRes.json();
-        setInformationalFiles(infoData || []);
+      // Fetch informational files from scan status
+      if (scanData.status === 'completed' && scanData.report) {
+        setInformationalFiles(scanData.report.informational_files || []);
       }
 
       const historyRes = await fetch(`${API_BASE}/reports/history`);
@@ -288,6 +289,12 @@ function App() {
         <Header 
           title={activePage === 'dashboard' ? 'Security Dashboard' : activePage.charAt(0).toUpperCase() + activePage.slice(1)}
           lastUpdate={lastUpdate}
+          scanStats={{
+            totalScans: history.length,
+            totalThreats: threats.length,
+            lastScanDate: history[0]?.scan_date
+          }}
+          onToast={(alert) => setAlerts(prev => [...prev.slice(-4), { ...alert, id: Date.now() + Math.random(), timestamp: new Date() }])}
         />
         
         {/* Toast Alerts */}
@@ -463,31 +470,25 @@ function App() {
 
           {activePage === 'reports' && (
             <div className="max-w-7xl mx-auto">
-              <motion.div variants={itemVariants} className="glass rounded-xl p-8 text-center">
-                <p className="text-muted">Reports page coming soon...</p>
-              </motion.div>
+              <Reports />
             </div>
           )}
 
           {activePage === 'history' && (
             <div className="max-w-7xl mx-auto">
-              <motion.div variants={itemVariants} className="glass rounded-xl p-8 text-center">
-                <p className="text-muted">History page coming soon...</p>
-              </motion.div>
+              <HistoryPage />
             </div>
           )}
 
           {activePage === 'settings' && (
-            <div className="max-w-7xl mx-auto space-y-6">
-              <motion.div variants={itemVariants}>
-                <ScanConfig
-                  onToast={(alert) => setAlerts(prev => [...prev.slice(-4), { ...alert, id: Date.now() + Math.random(), timestamp: new Date() }])}
-                  onStartScan={handleStartScan}
-                  scanStatus={scanStatus}
-                  currentScanFolder={configFolder}
-                  lastScanFolder={lastScanFolder}
-                />
-              </motion.div>
+            <div className="max-w-7xl mx-auto">
+              <SettingsPage
+                onToast={(alert) => setAlerts(prev => [...prev.slice(-4), { ...alert, id: Date.now() + Math.random(), timestamp: new Date() }])}
+                onStartScan={handleStartScan}
+                scanStatus={scanStatus}
+                currentScanFolder={configFolder}
+                lastScanFolder={lastScanFolder}
+              />
             </div>
           )}
         </motion.main>
@@ -500,7 +501,9 @@ function App() {
 export default function AppWithErrorBoundary() {
   return (
     <ErrorBoundary>
-      <App />
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }
