@@ -1,8 +1,4 @@
 node_modules/
 *.db
-reports/
-.env
 .DS_Store
-dist/
-build/
 *.log
