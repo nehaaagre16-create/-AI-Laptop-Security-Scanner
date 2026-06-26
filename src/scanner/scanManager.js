@@ -156,11 +156,12 @@ class ScanManager {
         files_scanned: scanResult.files.length,
         folders_scanned: scanResult.folders,
         hidden_files: scanResult.files.filter(f => f.isHidden).length,
-        dangerous_files: scanResult.files.filter(f => f.isDangerous).length,
+        dangerous_files: actualThreats.length, // Actual threats, not extension-based count
         duplicate_files: scanResult.files.filter(f => f.isDuplicate).length,
         modified_files: 0,
         security_score: securityScore,
-        scan_duration_ms: scanDuration
+        scan_duration_ms: scanDuration,
+        scan_path: targetPath
       });
 
       // Only save actual threats to threats table

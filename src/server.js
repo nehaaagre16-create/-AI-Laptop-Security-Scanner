@@ -172,6 +172,31 @@ app.post('/api/config/folder', async (req, res) => {
   }
 });
 
+// Notification preferences endpoints
+app.get('/api/notifications', async (req, res) => {
+  try {
+    const { getUserPreferences } = require('./database/db');
+    const prefs = await getUserPreferences(1);
+    res.json({ notificationsEnabled: prefs.notifications_enabled === 1 });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/notifications', async (req, res) => {
+  try {
+    const { enabled } = req.body;
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: 'enabled boolean required' });
+    }
+    const { updateUserPreferences } = require('./database/db');
+    await updateUserPreferences(1, { notifications_enabled: enabled });
+    res.json({ success: true, notificationsEnabled: enabled });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../dashboard/index.html'));
 });

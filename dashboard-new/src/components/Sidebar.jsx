@@ -3,8 +3,6 @@ import { motion } from 'framer-motion';
 import { 
   LayoutDashboard, 
   ShieldAlert, 
-  FileText, 
-  BarChart3, 
   History, 
   Settings,
   ChevronLeft,
@@ -13,9 +11,7 @@ import {
 
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'threats', label: 'Threats', icon: ShieldAlert },
-  { id: 'files', label: 'Files', icon: FileText },
-  { id: 'reports', label: 'Reports', icon: BarChart3 },
+  { id: 'findings', label: 'Findings', icon: ShieldAlert },
   { id: 'history', label: 'History', icon: History },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
@@ -77,7 +73,7 @@ function Sidebar({ activePage, onPageChange, collapsed, onToggle, threatCount })
                 <span className="relative z-10">{item.label}</span>
               )}
               
-              {!collapsed && item.id === 'threats' && threatCount > 0 && (
+              {!collapsed && item.id === 'findings' && threatCount > 0 && (
                 <span className="relative z-10 ml-auto bg-danger/20 text-danger text-[10px] font-bold px-2 py-0.5 rounded-full">
                   {threatCount}
                 </span>

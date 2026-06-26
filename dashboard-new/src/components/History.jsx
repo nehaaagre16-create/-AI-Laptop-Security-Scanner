@@ -19,7 +19,7 @@ import {
   XCircle,
   Loader2,
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, Cell } from 'recharts';
 
 const API_BASE = '';
 
@@ -124,13 +124,12 @@ function formatDate(dateStr) {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
   });
 }
 
 function formatDuration(ms) {
   if (!ms) return 'N/A';
+  if (ms < 1000) return `${ms}ms`;
   const seconds = Math.floor(ms / 1000);
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
@@ -159,6 +158,8 @@ function formatRelativeDate(dateStr) {
 function HistoryPage() {
   const [scans, setScans] = useState([]);
   const [scoreTrend, setScoreTrend] = useState([]);
+  const [riskDistribution, setRiskDistribution] = useState([]);
+  const [latestScan, setLatestScan] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
@@ -175,6 +176,7 @@ function HistoryPage() {
     try {
       setError(null);
       
+      // Fetch scan history
       const res = await fetch(`${API_BASE}/reports/history`);
       if (!res.ok) throw new Error('Failed to fetch history');
       const data = await res.json();
@@ -183,11 +185,11 @@ function HistoryPage() {
       const formattedScans = data.map((scan) => ({
         id: scan.id,
         scanDate: scan.scan_date,
-        folder: '/home',
+        folder: scan.scan_path || '/home',
         filesAnalyzed: scan.files_scanned,
         foldersAnalyzed: scan.folders_scanned,
         scanDuration: scan.scan_duration_ms,
-        threatsFound: scan.dangerous_files || 0,
+        threatsFound: scan.threats_found || 0,
         securityScore: scan.security_score,
         status: scan.status,
       }));
@@ -200,6 +202,25 @@ function HistoryPage() {
         score: scan.security_score,
       }));
       setScoreTrend(trend);
+
+      // Fetch latest scan for risk distribution
+      const scanRes = await fetch(`${API_BASE}/scan/status`);
+      if (scanRes.ok) {
+        const scanData = await scanRes.json();
+        if (scanData.status === 'completed' && scanData.report) {
+          setLatestScan(scanData.report);
+          const rd = scanData.report.risk_distribution || {};
+          const metrics = scanData.report.metrics || {};
+          setRiskDistribution([
+            { name: 'Critical', count: rd.critical || 0, color: '#EF4444' },
+            { name: 'High', count: rd.high || 0, color: '#F59E0B' },
+            { name: 'Medium', count: rd.medium || 0, color: '#8B5CF6' },
+            { name: 'Low', count: rd.low || 0, color: '#6366F1' },
+            { name: 'Safe', count: metrics.safe_files || 0, color: '#22C55E' },
+            { name: 'Info', count: metrics.informational_count || 0, color: '#94A3B8' },
+          ]);
+        }
+      }
     } catch (err) {
       console.error('Fetch error:', err);
       setError(err.message);
@@ -345,47 +366,84 @@ function HistoryPage() {
         </div>
       </motion.div>
 
-      {/* Score Trend Chart */}
-      {scoreTrend.length > 0 && (
-        <motion.div variants={itemVariants}>
-          <div className="glass rounded-xl p-6 border border-white/5">
-            <div className="flex items-center gap-3 mb-4">
-              <BarChart3 className="w-5 h-5 text-primary" />
-              <h3 className="text-lg font-semibold text-text-primary">Security Score Trend</h3>
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Score Trend Chart */}
+        {scoreTrend.length > 0 && (
+          <motion.div variants={itemVariants}>
+            <div className="glass rounded-xl p-6 border border-white/5">
+              <div className="flex items-center gap-3 mb-4">
+                <BarChart3 className="w-5 h-5 text-primary" />
+                <h3 className="text-lg font-semibold text-text-primary">Security Score Trend</h3>
+              </div>
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={scoreTrend}>
+                    <defs>
+                      <linearGradient id="scoreGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="date" tick={{ fill: '#94A3B8', fontSize: 12 }} axisLine={false} tickLine={false} />
+                    <YAxis domain={[0, 100]} tick={{ fill: '#94A3B8', fontSize: 12 }} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#111827',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '8px',
+                        color: '#F9FAFB',
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="score"
+                      stroke="#8B5CF6"
+                      strokeWidth={2}
+                      fill="url(#scoreGradient)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={scoreTrend}>
-                  <defs>
-                    <linearGradient id="scoreGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                  <XAxis dataKey="date" tick={{ fill: '#94A3B8', fontSize: 12 }} axisLine={false} tickLine={false} />
-                  <YAxis domain={[0, 100]} tick={{ fill: '#94A3B8', fontSize: 12 }} axisLine={false} tickLine={false} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#111827',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: '8px',
-                      color: '#F9FAFB',
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="score"
-                    stroke="#8B5CF6"
-                    strokeWidth={2}
-                    fill="url(#scoreGradient)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+          </motion.div>
+        )}
+
+        {/* Risk Distribution Chart */}
+        {riskDistribution.length > 0 && riskDistribution.some(d => d.count > 0) && (
+          <motion.div variants={itemVariants}>
+            <div className="glass rounded-xl p-6 border border-white/5">
+              <div className="flex items-center gap-3 mb-4">
+                <BarChart3 className="w-5 h-5 text-primary" />
+                <h3 className="text-lg font-semibold text-text-primary">Risk Distribution</h3>
+              </div>
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={riskDistribution} barSize={40}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="name" tick={{ fill: '#94A3B8', fontSize: 12 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: '#94A3B8', fontSize: 12 }} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#111827',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '8px',
+                        color: '#F9FAFB',
+                      }}
+                    />
+                    <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                      {riskDistribution.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-          </div>
-        </motion.div>
-      )}
+          </motion.div>
+        )}
+      </div>
 
       {/* Filters Section */}
       <motion.div variants={itemVariants}>
@@ -561,7 +619,7 @@ function HistoryPage() {
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-2">
                           <Calendar className="w-3.5 h-3.5 text-muted" />
-                          <span className="text-sm text-muted">{formatRelativeDate(scan.scanDate)}</span>
+                          <span className="text-sm text-muted">{formatDate(scan.scanDate)}</span>
                         </div>
                       </td>
                       <td className="px-5 py-3">

@@ -7,12 +7,10 @@ import HeroCard from './components/HeroCard';
 import StatsGrid from './components/StatsGrid';
 import SeverityCards from './components/SeverityCards';
 import ChartsSection from './components/ChartsSection';
-import ThreatsTable from './components/ThreatsTable';
+import FindingsTable from './components/FindingsTable';
 import Recommendations from './components/Recommendations';
 import ToastAlert from './components/ToastAlert';
 import ScanConfigCard from './components/ScanConfigCard';
-import ScanScope from './components/ScanScope';
-import Reports from './components/Reports';
 import HistoryPage from './components/History';
 import SettingsPage from './components/Settings';
 import { ThemeProvider } from './components/ThemeContext';
@@ -147,6 +145,10 @@ function App() {
               return;
             }
             
+            // Check notification preference before showing alert
+            const notificationsEnabled = localStorage.getItem('securescan-notifications') !== 'false';
+            if (!notificationsEnabled) return;
+            
             // Add new alert
             const newAlert = {
               id: Date.now() + Math.random(),
@@ -225,11 +227,17 @@ function App() {
   const suspiciousCount = metrics.suspicious_count || 0;
   const informationalCount = metrics.informational_count || 0;
   
-  // Scan coverage calculation
-  const filesystemFiles = summary.filesystem_files || 352937; // Raw filesystem count
+  // Combine threats and informational files into a single findings array
+  const allFindings = [
+    ...threats,
+    ...(informationalFiles || []).map(f => ({ ...f, risk_level: 'informational' }))
+  ];
+  
+  // Scan coverage calculation — use total_files from backend (files in scan path)
+  const totalFiles = summary.total_files || 0;
   const scannedFiles = metrics.files_scanned || 0;
-  const coveragePercent = filesystemFiles > 0 ? Math.round((scannedFiles / filesystemFiles) * 100) : 0;
-  const excludedFiles = Math.max(0, filesystemFiles - scannedFiles);
+  const coveragePercent = totalFiles > 0 ? Math.round((scannedFiles / totalFiles) * 100) : 0;
+  const excludedFiles = Math.max(0, totalFiles - scannedFiles);
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -287,14 +295,11 @@ function App() {
       
       <div className="flex-1 flex flex-col overflow-hidden relative">
         <Header 
-          title={activePage === 'dashboard' ? 'Security Dashboard' : activePage.charAt(0).toUpperCase() + activePage.slice(1)}
+          title={activePage === 'dashboard' ? 'Security Dashboard' : activePage === 'findings' ? 'Findings' : activePage.charAt(0).toUpperCase() + activePage.slice(1)}
           lastUpdate={lastUpdate}
-          scanStats={{
-            totalScans: history.length,
-            totalThreats: threats.length,
-            lastScanDate: history[0]?.scan_date
-          }}
-          onToast={(alert) => setAlerts(prev => [...prev.slice(-4), { ...alert, id: Date.now() + Math.random(), timestamp: new Date() }])}
+          onPageChange={setActivePage}
+          alerts={alerts}
+          onDismissAlert={dismissAlert}
         />
         
         {/* Toast Alerts */}
@@ -389,12 +394,12 @@ function App() {
 
               <motion.div variants={itemVariants}>
                 <StatsGrid 
-                  filesAnalyzed={metrics.files_scanned || 0}
                   foldersAnalyzed={metrics.folders_scanned || 0}
                   safeFiles={safeFiles}
-                  threatsFound={actualThreats}
+                  scanDuration={summary.scan_duration_ms || 0}
+                  coveragePercent={coveragePercent}
+                  excludedFiles={excludedFiles}
                   informationalCount={informationalCount}
-                  suspiciousCount={suspiciousCount}
                 />
               </motion.div>
 
@@ -426,7 +431,7 @@ function App() {
               </motion.div>
 
               <motion.div variants={itemVariants}>
-                <ThreatsTable threats={threats.slice(0, 10)} />
+                <FindingsTable findings={allFindings.slice(0, 10)} />
               </motion.div>
 
               <motion.div variants={itemVariants}>
@@ -438,39 +443,11 @@ function App() {
             </div>
           )}
 
-          {activePage === 'threats' && (
+          {activePage === 'findings' && (
             <div className="max-w-7xl mx-auto">
               <motion.div variants={itemVariants}>
-                <ThreatsTable threats={threats} showAll />
+                <FindingsTable findings={allFindings} showAll />
               </motion.div>
-            </div>
-          )}
-          {activePage === 'files' && (
-            <div className="max-w-7xl mx-auto">
-              <motion.div variants={itemVariants} className="glass rounded-xl p-8 text-center">
-                <h2 className="text-lg font-semibold text-text-primary mb-4">Informational Files</h2>
-                <p className="text-sm text-muted mb-4">Files flagged for review but not classified as threats</p>
-                <div className="space-y-2">
-                  {informationalFiles.length === 0 && (
-                    <p className="text-sm text-muted">No informational files found</p>
-                  )}
-                  {informationalFiles.map((file, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-muted" />
-                        <span className="text-sm text-text-primary">{file.file_name}</span>
-                      </div>
-                      <span className="text-xs text-muted">{file.threat_type} ({file.risk_level})</span>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            </div>
-          )}
-
-          {activePage === 'reports' && (
-            <div className="max-w-7xl mx-auto">
-              <Reports />
             </div>
           )}
 

@@ -87,18 +87,16 @@ function SettingsPage({ onToast, onStartScan, scanStatus, currentScanFolder, las
   const [testResult, setTestResult] = useState(null);
 
   // Settings state - only features that actually work
-  const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
-    return localStorage.getItem('securescan-notifications') !== 'false';
-  });
-  
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [usbScanEnabled, setUsbScanEnabled] = useState(false);
   const [downloadMonitorEnabled, setDownloadMonitorEnabled] = useState(false);
 
   const { theme, setTheme } = useTheme();
 
-  // Load current folder on mount
+  // Load current folder and notification preferences on mount
   useEffect(() => {
     loadCurrentFolder();
+    loadNotificationPreferences();
   }, []);
 
   const loadCurrentFolder = async () => {
@@ -110,6 +108,23 @@ function SettingsPage({ onToast, onStartScan, scanStatus, currentScanFolder, las
       setInputFolder(data.folderPath || '/home/paperclip');
     } catch (err) {
       console.error('Load folder error:', err);
+    }
+  };
+
+  const loadNotificationPreferences = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/notifications`);
+      if (!res.ok) throw new Error('Failed to load notification preferences');
+      const data = await res.json();
+      setNotificationsEnabled(data.notificationsEnabled);
+      localStorage.setItem('securescan-notifications', data.notificationsEnabled.toString());
+    } catch (err) {
+      console.error('Load notification preferences error:', err);
+      // Fallback to localStorage
+      const saved = localStorage.getItem('securescan-notifications');
+      if (saved !== null) {
+        setNotificationsEnabled(saved !== 'false');
+      }
     }
   };
 
@@ -227,9 +242,20 @@ function SettingsPage({ onToast, onStartScan, scanStatus, currentScanFolder, las
   };
 
   // Working settings handlers
-  const handleNotificationsToggle = (enabled) => {
+  const handleNotificationsToggle = async (enabled) => {
     setNotificationsEnabled(enabled);
     localStorage.setItem('securescan-notifications', enabled.toString());
+    
+    try {
+      await fetch(`${API_BASE}/api/notifications`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled })
+      });
+    } catch (err) {
+      console.error('Save notification preferences error:', err);
+    }
+    
     onToast?.({
       type: 'Settings Updated',
       severity: 'low',
@@ -549,102 +575,7 @@ function SettingsPage({ onToast, onStartScan, scanStatus, currentScanFolder, las
         </div>
       </motion.div>
 
-      {/* Coming Soon Section */}
-      <motion.div variants={itemVariants}>
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-2 h-2 rounded-full bg-secondary" />
-          <h2 className="text-sm font-semibold text-secondary uppercase tracking-wider">Coming Soon</h2>
-        </div>
 
-        <div className="glass rounded-xl border border-white/5 overflow-hidden opacity-70">
-          <div className="p-5 border-b border-white/5">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-secondary/10">
-                <Shield className="w-5 h-5 text-secondary" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-text-primary">Advanced Protection</h3>
-                <p className="text-xs text-muted mt-0.5">Features in development for future releases</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-5 space-y-4">
-            {/* USB Device Protection - Disabled */}
-            <ToggleSwitch
-              enabled={usbScanEnabled}
-              onChange={() => {}}
-              label="USB Device Protection"
-              description="Automatic scanning of external USB devices will be available in a future update."
-              icon={Usb}
-              disabled={true}
-              badge="Coming Soon"
-            />
-
-            {/* Downloads Protection - Disabled */}
-            <ToggleSwitch
-              enabled={downloadMonitorEnabled}
-              onChange={() => {}}
-              label="Downloads Protection"
-              description="Automatic monitoring of newly downloaded files will be available in a future update."
-              icon={Download}
-              disabled={true}
-              badge="Coming Soon"
-            />
-
-            {/* Info note */}
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-secondary/5 border border-secondary/10">
-              <Info className="w-4 h-4 text-secondary mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-muted">
-                These features require OS-level integration and are planned for v2.2. 
-                Current scanner protects all files during regular scans.
-              </p>
-            </div>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* System Info */}
-      <motion.div variants={itemVariants}>
-        <div className="glass rounded-xl border border-white/5 p-5">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Settings className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-text-primary">System Information</h3>
-              <p className="text-xs text-muted mt-0.5">Current scanner configuration</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-              <p className="text-xs text-muted uppercase tracking-wider">Scanner Version</p>
-              <p className="text-sm text-text-primary font-mono mt-1">v2.1.0</p>
-            </div>
-            <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-              <p className="text-xs text-muted uppercase tracking-wider">Database</p>
-              <p className="text-sm text-text-primary font-mono mt-1">SQLite v3.45</p>
-            </div>
-            <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-              <p className="text-xs text-muted uppercase tracking-wider">Scan Engine</p>
-              <p className="text-sm text-text-primary font-mono mt-1">Node.js File Scanner</p>
-            </div>
-            <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-              <p className="text-xs text-muted uppercase tracking-wider">Threat Database</p>
-              <p className="text-sm text-text-primary font-mono mt-1">8 Virus Types</p>
-            </div>
-            <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-              <p className="text-xs text-muted uppercase tracking-wider">Background Scan</p>
-              <p className="text-sm text-text-primary font-mono mt-1">Every 30 Minutes</p>
-            </div>
-            <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-              <p className="text-xs text-muted uppercase tracking-wider">File Watcher</p>
-              <p className="text-sm text-text-primary font-mono mt-1">Active</p>
-            </div>
-          </div>
-        </div>
-      </motion.div>
     </motion.div>
   );
 }

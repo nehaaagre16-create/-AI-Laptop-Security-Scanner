@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { AlertOctagon, AlertTriangle, AlertCircle, Info, FileCode, Shield } from 'lucide-react';
 
 function SeverityCards({ critical, high, medium, low, informational, suspicious }) {
+  // Only show severity cards that have actual threats
   const severities = [
     {
       label: 'Critical',
@@ -48,51 +49,58 @@ function SeverityCards({ critical, high, medium, low, informational, suspicious 
       text: 'text-secondary',
       bg: 'bg-secondary/10',
     },
-  ];
+  ].filter(s => s.count > 0);
+
+  // If no threats at all, show nothing
+  if (severities.length === 0 && informational === 0 && suspicious === 0) {
+    return null;
+  }
 
   return (
     <div className="space-y-4">
       {/* Actual Threats */}
-      <div>
-        <h4 className="text-xs font-semibold text-muted uppercase tracking-wider mb-3 flex items-center gap-2">
-          <Shield className="w-3.5 h-3.5" />
-          Actual Threats
-        </h4>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {severities.map((sev, index) => (
-            <motion.div
-              key={sev.label}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 + index * 0.1 }}
-              whileHover={{ scale: 1.03, transition: { duration: 0.2 } }}
-              className={`glass rounded-xl p-5 border ${sev.border} bg-gradient-to-br ${sev.gradient} ${sev.glow} transition-all duration-300`}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className={`p-2 rounded-lg ${sev.bg} ${sev.text}`}>
-                  <sev.icon className="w-5 h-5" />
-                </div>
-                <span className={`text-xs font-semibold uppercase tracking-wider ${sev.text} opacity-70`}>
-                  {sev.label}
-                </span>
-              </div>
-
+      {severities.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold text-muted uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Shield className="w-3.5 h-3.5" />
+            Actual Threats
+          </h4>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {severities.map((sev, index) => (
               <motion.div
-                className="text-3xl font-bold text-text-primary"
-                initial={{ opacity: 0, scale: 0.5 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.5 + index * 0.1, type: 'spring' }}
+                key={sev.label}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 + index * 0.1 }}
+                whileHover={{ scale: 1.03, transition: { duration: 0.2 } }}
+                className={`glass rounded-xl p-5 border ${sev.border} bg-gradient-to-br ${sev.gradient} ${sev.glow} transition-all duration-300`}
               >
-                {sev.count}
-              </motion.div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className={`p-2 rounded-lg ${sev.bg} ${sev.text}`}>
+                    <sev.icon className="w-5 h-5" />
+                  </div>
+                  <span className={`text-xs font-semibold uppercase tracking-wider ${sev.text} opacity-70`}>
+                    {sev.label}
+                  </span>
+                </div>
 
-              <p className="text-xs text-muted mt-1">
-                {sev.count === 1 ? 'threat detected' : 'threats detected'}
-              </p>
-            </motion.div>
-          ))}
+                <motion.div
+                  className="text-3xl font-bold text-text-primary"
+                  initial={{ opacity: 0, scale: 0.5 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.5 + index * 0.1, type: 'spring' }}
+                >
+                  {sev.count}
+                </motion.div>
+
+                <p className="text-xs text-muted mt-1">
+                  {sev.count === 1 ? 'threat detected' : 'threats detected'}
+                </p>
+              </motion.div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Informational / Suspicious */}
       {(informational > 0 || suspicious > 0) && (

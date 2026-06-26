@@ -10,7 +10,10 @@ function initDatabase() {
     db = new sqlite3.Database(DB_PATH, (err) => {
       if (err) return reject(err);
       console.log('Connected to SQLite database');
-      createTables().then(resolve).catch(reject);
+      createTables()
+        .then(() => createUsersTable())
+        .then(resolve)
+        .catch(reject);
     });
   });
 }
@@ -102,20 +105,40 @@ function createTables() {
   });
 }
 
+function createUsersTable() {
+  return new Promise((resolve, reject) => {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        name TEXT,
+        role TEXT DEFAULT 'user',
+        notifications_enabled INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `, (err) => {
+      if (err) return reject(err);
+      resolve();
+    });
+  });
+}
+
 function saveScan(scanData) {
   return new Promise((resolve, reject) => {
     const {
       files_scanned, folders_scanned, hidden_files, dangerous_files,
-      duplicate_files, modified_files, security_score, scan_duration_ms
+      duplicate_files, modified_files, security_score, scan_duration_ms, scan_path
     } = scanData;
     
     db.run(
       `INSERT INTO scan_history 
        (files_scanned, folders_scanned, hidden_files, dangerous_files, 
-        duplicate_files, modified_files, security_score, scan_duration_ms)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        duplicate_files, modified_files, security_score, scan_duration_ms, scan_path)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [files_scanned, folders_scanned, hidden_files, dangerous_files,
-       duplicate_files, modified_files, security_score, scan_duration_ms],
+       duplicate_files, modified_files, security_score, scan_duration_ms, scan_path || '/home'],
       function(err) {
         if (err) return reject(err);
         resolve(this.lastID);
@@ -361,6 +384,35 @@ function updateScanConfig(folderPath) {
   });
 }
 
+function getUserPreferences(userId = 1) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT notifications_enabled FROM users WHERE id = ?`,
+      [userId],
+      (err, row) => {
+        if (err) return reject(err);
+        resolve({
+          notifications_enabled: row ? row.notifications_enabled : 1
+        });
+      }
+    );
+  });
+}
+
+function updateUserPreferences(userId = 1, preferences) {
+  return new Promise((resolve, reject) => {
+    const { notifications_enabled } = preferences;
+    db.run(
+      `UPDATE users SET notifications_enabled = ?, updated_at = datetime('now') WHERE id = ?`,
+      [notifications_enabled ? 1 : 0, userId],
+      (err) => {
+        if (err) return reject(err);
+        resolve();
+      }
+    );
+  });
+}
+
 function getDatabase() {
   return db;
 }
@@ -381,5 +433,7 @@ module.exports = {
   saveHashCache,
   getScanConfig,
   updateScanConfig,
+  getUserPreferences,
+  updateUserPreferences,
   getDatabase
 };

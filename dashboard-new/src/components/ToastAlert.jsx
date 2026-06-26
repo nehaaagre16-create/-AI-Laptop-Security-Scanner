@@ -21,6 +21,14 @@ function ToastAlert({ alert, onDismiss }) {
   const Icon = severityIcons[alert.severity] || Bell;
   const colorClass = severityColors[alert.severity] || severityColors.low;
 
+  // Auto-dismiss after 3 seconds
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onDismiss();
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [onDismiss]);
+
   return (
     <motion.div
       initial={{ opacity: 0, x: 100, scale: 0.9 }}

@@ -1,16 +1,9 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { FileText, FolderOpen, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { FolderOpen, ShieldCheck, Clock, Activity, FileX, AlertCircle } from 'lucide-react';
 
-function StatsGrid({ filesAnalyzed, foldersAnalyzed, safeFiles, threatsFound }) {
+function StatsGrid({ foldersAnalyzed, safeFiles, scanDuration, coveragePercent, excludedFiles, informationalCount }) {
   const stats = [
-    {
-      label: 'Files Analyzed',
-      value: filesAnalyzed,
-      icon: FileText,
-      color: 'primary',
-      tooltip: 'User files scanned for security threats',
-    },
     {
       label: 'Folders Analyzed',
       value: foldersAnalyzed,
@@ -26,11 +19,18 @@ function StatsGrid({ filesAnalyzed, foldersAnalyzed, safeFiles, threatsFound }) 
       tooltip: 'Files with no detected threats',
     },
     {
-      label: 'Threats Found',
-      value: threatsFound,
-      icon: AlertTriangle,
-      color: threatsFound > 0 ? 'danger' : 'success',
-      tooltip: 'Actual security threats detected',
+      label: 'Scan Duration',
+      value: scanDuration > 0 ? `${(scanDuration / 1000).toFixed(1)}s` : 'N/A',
+      icon: Clock,
+      color: 'primary',
+      tooltip: 'Time taken for last scan',
+    },
+    {
+      label: 'Coverage',
+      value: `${coveragePercent}%`,
+      icon: Activity,
+      color: coveragePercent >= 80 ? 'success' : coveragePercent >= 50 ? 'warning' : 'danger',
+      tooltip: 'Percentage of filesystem files analyzed',
     },
   ];
 
