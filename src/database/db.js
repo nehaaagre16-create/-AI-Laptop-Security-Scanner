@@ -120,7 +120,14 @@ function createUsersTable() {
       )
     `, (err) => {
       if (err) return reject(err);
-      resolve();
+      // Insert default user if not exists (for notification preferences)
+      db.run(`
+        INSERT OR IGNORE INTO users (id, email, password_hash, name, role, notifications_enabled)
+        VALUES (1, 'admin@securescan.local', 'not_set', 'Admin', 'admin', 1)
+      `, (err2) => {
+        if (err2) return reject(err2);
+        resolve();
+      });
     });
   });
 }

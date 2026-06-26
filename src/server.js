@@ -210,9 +210,7 @@ async function startServer() {
     const initialFolder = await getScanConfig();
     
     app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Server running on http://0.0.0.0:${PORT}`);
-      console.log(`Dashboard: http://localhost:${PORT}`);
-      console.log(`WSL IP: http://172.30.77.104:${PORT}`);
+      console.log(`Server running on http://localhost:${PORT}`);
       
       // Start background scanning loop (every 30 minutes)
       const { startBackgroundScanning } = require('./routes/scan');

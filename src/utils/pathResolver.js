@@ -261,24 +261,13 @@ function runPathResolverTests() {
     const ok = result.normalizedPath === t.expected && result.type === t.type;
     if (ok) {
       passed++;
-      console.log(`✓ "${t.input}" → ${result.normalizedPath} (${result.type})`);
     } else {
       failed++;
-      console.log(`✗ "${t.input}"`);
-      console.log(`  expected: ${t.expected} (${t.type})`);
-      console.log(`  got:      ${result.normalizedPath} (${result.type})`);
     }
   }
 
-  console.log(`\n${passed}/${tests.length} passed, ${failed} failed`);
   return failed === 0;
 }
-
-// Run tests if executed directly
-if (require.main === module) {
-  runPathResolverTests();
-}
-
 module.exports = {
   resolvePath,
   resolveWSLPath,
